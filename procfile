@@ -1,0 +1,1 @@
+web: streamlit run travel_flight_train --server.port $PORT --server.enableCORS false
