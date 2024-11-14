@@ -21,7 +21,7 @@ api_key = os.getenv('GEMINI_API_KEY')
 nlp = spacy.load("en_core_web_sm")
 
 # Load and filter cities data
-df1 = pd.read_csv(r'G:\HamsafarAI\data\worldcities.csv')
+df1 = pd.read_csv(r'Indian_cities.csv')
 df1 = df1[df1['country'] == 'India']
 cities = df1['city_ascii'].dropna().unique().tolist()
 
