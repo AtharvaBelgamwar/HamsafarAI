@@ -12,19 +12,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 import google.generativeai as genai
 import dateparser
 from fuzzywuzzy import process
-import subprocess
+
 # Load environment variables
 load_dotenv()
 api_key = st.secrets['GEMINI_API_KEY']
 
 # Load spaCy model
+nlp = spacy.load("en_core_web_sm")
 
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    # Download the model if not already installed
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
 # Load and filter cities data
 df1 = pd.read_csv(r'Indian_cities.csv')
 df1 = df1[df1['country'] == 'India']
