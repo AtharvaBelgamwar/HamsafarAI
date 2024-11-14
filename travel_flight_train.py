@@ -28,41 +28,44 @@ cities = df1['city_ascii'].dropna().unique().tolist()
 # Initialize Google Generative AI model
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-1.5-flash")
-def get_fare_details(train_no, from_station_code, to_station_code):
+def get_fare_details(train_no, from_station_code, to_station_code, class_type, quota, journey_date):
     conn = http.client.HTTPSConnection("irctc1.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': "b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a",
+        'x-rapidapi-key': 'b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a',
         'x-rapidapi-host': "irctc1.p.rapidapi.com"
     }
     
-    conn.request("GET", f"/api/v2/getFare?trainNo={train_no}&fromStationCode={from_station_code}&toStationCode={to_station_code}", headers=headers)
+    # Prepare the API request URL with the provided parameters
+    request_url = f"/api/v1/checkSeatAvailability?classType={class_type}&fromStationCode={from_station_code}&quota={quota}&toStationCode={to_station_code}&trainNo={train_no}&date={journey_date}"
+    
+    # Make the API request
+    conn.request("GET", request_url, headers=headers)
     res = conn.getresponse()
     data = res.read()
     conn.close()
     
-    fare_data = json.loads(data.decode("utf-8"))
-    if not fare_data["status"]:
-        print("Error fetching fare details:", fare_data["message"])
+    # Parse the JSON response
+    seat_data = json.loads(data.decode("utf-8"))
+    if not seat_data["status"]:
+        print("Error fetching seat availability:", seat_data["message"])
         return None
     
-    # Parse fare details into a more readable format
-    fare_summary = {"general": [], "tatkal": []}
-    for fare_type in ["general", "tatkal"]:
-        if fare_type in fare_data["data"]:
-            for fare_class in fare_data["data"][fare_type]:
-                class_type = fare_class["classType"]
-                total_fare = fare_class["fare"]
-                
-                # Get fare breakdown details
-                breakdown = {item["title"]: item["cost"] for item in fare_class["breakup"]}
-                
-                fare_summary[fare_type].append({
-                    "classType": class_type,
-                    "totalFare": total_fare,
-                    "breakdown": breakdown
-                })
+    # Extract and format seat availability details
+    availability_details = []
+    for availability in seat_data["data"]:
+        availability_info = {
+            "ticket_fare": availability["ticket_fare"],
+            "catering_charge": availability["catering_charge"],
+            "total_fare": availability["total_fare"],
+            "date": availability["date"],
+            "status": availability["current_status"]
+        }
+        availability_details.append(availability_info)
     
-    return fare_summary
+    return availability_details
+    
+   
+    
 # Precompute city vectors for similarity search
 def precompute_city_vectors(original_cities):
     vectorizer = TfidfVectorizer()
@@ -164,7 +167,7 @@ def get_trains_between_stations(from_station, to_station, date_of_journey):
     to_station = to_station.strip() if to_station else ""
     conn = http.client.HTTPSConnection("irctc1.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': "b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a",
+        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
         'x-rapidapi-host': "irctc1.p.rapidapi.com"
     }
     url = f"/api/v3/trainBetweenStations?fromStationCode={from_station}&toStationCode={to_station}&dateOfJourney={date_of_journey}"
@@ -176,7 +179,7 @@ def get_trains_between_stations(from_station, to_station, date_of_journey):
 def get_city_identifiers(city):
     conn = http.client.HTTPSConnection("sky-scrapper.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': "b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a",
+        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
         'x-rapidapi-host': "sky-scrapper.p.rapidapi.com"
     }
     conn.request("GET", f"/api/v1/flights/searchAirport?query={city}&locale=en-US", headers=headers)
@@ -194,7 +197,7 @@ def get_city_identifiers(city):
 def get_flight_details(origin_skyId, destination_skyId, origin_entityId, destination_entityId, date):
     conn = http.client.HTTPSConnection("sky-scrapper.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': "b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a",
+        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
         'x-rapidapi-host': "sky-scrapper.p.rapidapi.com"
     }
     conn.request("GET", f"/api/v2/flights/searchFlightsComplete?originSkyId={origin_skyId}&destinationSkyId={destination_skyId}&originEntityId={origin_entityId}&destinationEntityId={destination_entityId}&date={date}&cabinClass=economy&adults=1&sortBy=best&currency=INR&market=en-US&countryCode=US", headers=headers)
@@ -274,116 +277,153 @@ def parse_travel_plan(response_text):
 # Streamlit Interface
 st.title("Travel Planner")
 
+# Initialize session state variables if not already set
+if "origin" not in st.session_state:
+    st.session_state.origin = ""
+if "destination" not in st.session_state:
+    st.session_state.destination = ""
+if "journey_date" not in st.session_state:
+    st.session_state.journey_date = ""
+if "details_confirmed" not in st.session_state:
+    st.session_state.details_confirmed = False
+
 # Query input
-user_query = st.text_input("Enter your travel query", "I have some time so I wanna go on a trip from Chennai to Prayagraj next month 22nd")
+user_query = st.text_input("Enter your travel query", "I have some time so I wanna go on a trip from Chennai to Prayagraj next month on the 22nd")
+
+# Process the query when the button is clicked
 if st.button("Process Query"):
     # Extract travel details
     origin, destination = extract_cities(user_query, cities)
     journey_date = extract_date(user_query)
     
-    # Display extracted details
-    st.write(f"**Origin**: {origin if origin else 'Not specified'}")
-    st.write(f"**Destination**: {destination if destination else 'Not specified'}")
-    st.write(f"**Journey Date**: {journey_date if journey_date else 'Not specified'}")
+    # Set session state variables for extracted information
+    st.session_state.origin = origin
+    st.session_state.destination = destination
+    st.session_state.journey_date = journey_date
+    st.session_state.details_confirmed = False  # Reset confirmation flag on new query processing
 
-    if origin and destination and journey_date:
-        # Generate travel plan (flight/train separation)
-        response = model.generate_content(f"I wanna know if I am going from {origin} to {destination}, then I want it such that I can save timelike mix of flight and train, can u give me the name of cities where i need to take flight and after that train, separeted by a 3 space between 2 sections, flight and train, you dont neeed to minimize time, just give me mix of flight and traij, i will check myself if thats optimal, just print flight and train where to where such that the citiesin all lower are flight and cities in all caps are train, include like  where to where also include the origin city")
-        print(response.text)
-        flight_cities, train_cities = parse_travel_plan(response.text)
+# Step 1: Display extracted information and allow confirmation or edits
+if st.session_state.origin or st.session_state.destination or st.session_state.journey_date:
+    st.write("### Please confirm or edit your trip details:")
+    origin = st.text_input("Origin", value=st.session_state.origin if st.session_state.origin else "Not specified")
+    destination = st.text_input("Destination", value=st.session_state.destination if st.session_state.destination else "Not specified")
+    journey_date = st.text_input("Journey Date (YYYY-MM-DD)", value=st.session_state.journey_date if st.session_state.journey_date else "Not specified")
+    
+    # Confirmation button to finalize details
+    if st.button("Confirm Details"):
+        # Update session state with confirmed details
+        st.session_state.origin = origin
+        st.session_state.destination = destination
+        st.session_state.journey_date = journey_date
+        st.session_state.details_confirmed = True  # Set confirmation flag
+
+# Step 2: Proceed to generate itinerary if details are confirmed
+if st.session_state.details_confirmed:
+    st.write(f"**Origin**: {st.session_state.origin}")
+    st.write(f"**Destination**: {st.session_state.destination}")
+    st.write(f"**Journey Date**: {st.session_state.journey_date}")
+    
+    # Ensure all essential details are provided before generating the itinerary
+    if st.session_state.origin and st.session_state.destination and st.session_state.journey_date:
+            response = model.generate_content(
+                f"I wanna know if I am going from {origin} to {destination}, then I want it such that I can save time like mix of flight and train, can u give me the name of cities where i need to take flight and after that train, separated by a 3 space between 2 sections, flight and train, you don't need to minimize time, just give me mix of flight and train, I will check myself if that's optimal, just print flight and train where to where such that the cities in all lower are flight and cities in all caps are train, include where to where also include the origin city, make sure you stick to the format I gave you lower for flight cities and caps for train cities."
+            )
+            print(response.text)
+            flight_cities, train_cities = parse_travel_plan(response.text)
         # print(flight_cities,train_cities)
         # Flight Segment
-        if flight_cities:
-            st.write("Fetching flight details...")
-            flight_count=0
-            for i in range(len(flight_cities) - 1):
-                origin_city = flight_cities[i]
-                destination_city = flight_cities[i + 1]
-                origin_skyId, origin_entityId = get_city_identifiers(origin_city)
-                destination_skyId, destination_entityId = get_city_identifiers(destination_city)
-                
-                if origin_skyId and destination_skyId:
-                    st.write(f"\nFlights from {origin_city.title()} to {destination_city.title()} on {journey_date}:")
-                    get_flight_details(origin_skyId, destination_skyId, origin_entityId, destination_entityId, journey_date)
+            if flight_cities:
+                st.write("Fetching flight details...")
+                flight_count=0
+                for i in range(len(flight_cities) - 1):
+                    origin_city = flight_cities[i]
+                    destination_city = flight_cities[i + 1]
+                    origin_skyId, origin_entityId = get_city_identifiers(origin_city)
+                    destination_skyId, destination_entityId = get_city_identifiers(destination_city)
                     
+                    if origin_skyId and destination_skyId:
+                        st.write(f"\nFlights from {origin_city.title()} to {destination_city.title()} on {journey_date}:")
+                        get_flight_details(origin_skyId, destination_skyId, origin_entityId, destination_entityId, journey_date)
+                        
 
 
-# Train Segment
-        if train_cities:
-            st.write("Fetching station codes for train cities...")
-            station_codes_response = model.generate_content(f"find station codes for {', '.join(train_cities)} cities, separated by commas with no spaces in between.")
-            station_codes = station_codes_response.text.strip().split(",")
+    # Train Segment
+            if train_cities:
+                st.write("Fetching station codes for train cities...")
+                station_codes_response = model.generate_content(f"find station codes for {', '.join(train_cities)} cities, separated by commas with no spaces in between.")
+                station_codes = station_codes_response.text.strip().split(",")
 
-            if len(station_codes) != len(train_cities):
-                st.write("Failed to fetch all station codes. Please try again or adjust the station codes manually.")
-            else:
-                # Train Segment
-                st.write("Fetching train details...")
-                current_date = journey_date
-                min_layover = timedelta(hours=1)
-                max_layover = timedelta(hours=6)
-                train_info_for_model = []  # To collect details to pass to model
+                if len(station_codes) != len(train_cities):
+                    st.write("Failed to fetch all station codes. Please try again or adjust the station codes manually.")
+                else:
+                    # Train Segment
+                    st.write("Fetching train details...")
+                    current_date = journey_date
+                    min_layover = timedelta(hours=1)
+                    max_layover = timedelta(hours=6)
+                    train_info_for_model = []  # To collect details to pass to model
 
-                for i in range(len(station_codes) - 1):
-                    from_station, to_station = station_codes[i], station_codes[i + 1]
-                    train_data = get_trains_between_stations(from_station, to_station, current_date)
-                    found_connection = False
-                    
-                    if 'data' in train_data and train_data['data']:
-                        for train in train_data['data']:
-                            departure_time = convert_time_to_datetime(train['from_std'], train['from_day'], current_date)
-                            arrival_time = convert_time_to_datetime(train['to_std'], train['to_day'], current_date)
-                            
-                            # Collect train details
-                            train_details = {
-                                "from_station_name": train['from_station_name'],
-                                "to_station_name": train['to_station_name'],
-                                "train_number": train['train_number'],
-                                "train_name": train['train_name'],
-                                "departure": train['from_std'],
-                                "arrival": train['to_std']
-                            }
-                            
-                            # Fetch fare details
-                            fare_details = get_fare_details(train['train_number'], from_station, to_station)
-                            # st.write(fare_details)
-                            train_details["fare_details"] = fare_details  # Add fare details to train info
+                    for i in range(len(station_codes) - 1):
+                        from_station, to_station = station_codes[i], station_codes[i + 1]
+                        train_data = get_trains_between_stations(from_station, to_station, current_date)
+                        found_connection = False
+                        
+                        if 'data' in train_data and train_data['data']:
+                            for train in train_data['data']:
+                                departure_time = convert_time_to_datetime(train['from_std'], train['from_day'], current_date)
+                                arrival_time = convert_time_to_datetime(train['to_std'], train['to_day'], current_date)
+                                
+                                # Collect train details
+                                train_details = {
+                                    "from_station_name": train['from_station_name'],
+                                    "to_station_name": train['to_station_name'],
+                                    "train_number": train['train_number'],
+                                    "train_name": train['train_name'],
+                                    "departure": train['from_std'],
+                                    "arrival": train['to_std']
+                                }
+                                
+                                # Fetch fare details
+                                fare_details = get_fare_details(train['train_number'], from_station, to_station,'2A','GN',journey_date)
+                                # st.write(fare_details)
+                                train_details["fare_details"] = fare_details  # Add fare details to train info
 
-                            # Add train and fare info to list for model formatting
-                            train_info_for_model.append(train_details)
+                                # Add train and fare info to list for model formatting
+                                train_info_for_model.append(train_details)
 
-                            # Layover check for connecting leg
-                            if i < len(station_codes) - 2:
-                                next_station_code = station_codes[i + 2]
-                                next_leg_date = arrival_time.strftime('%Y-%m-%d')
-                                next_trains = get_trains_between_stations(to_station, next_station_code, next_leg_date)
+                                # Layover check for connecting leg
+                                if i < len(station_codes) - 2:
+                                    next_station_code = station_codes[i + 2]
+                                    next_leg_date = arrival_time.strftime('%Y-%m-%d')
+                                    next_trains = get_trains_between_stations(to_station, next_station_code, next_leg_date)
 
-                                valid_next_train = None
-                                for next_train in next_trains['data']:
-                                    next_departure_time = convert_time_to_datetime(next_train['from_std'], next_train['from_day'], next_leg_date)
-                                    layover_time = next_departure_time - arrival_time
-                                    if min_layover <= layover_time <= max_layover:
-                                        valid_next_train = next_train
+                                    valid_next_train = None
+                                    for next_train in next_trains['data']:
+                                        next_departure_time = convert_time_to_datetime(next_train['from_std'], next_train['from_day'], next_leg_date)
+                                        layover_time = next_departure_time - arrival_time
+                                        if min_layover <= layover_time <= max_layover:
+                                            valid_next_train = next_train
+                                            break
+
+                                    if valid_next_train:
+                                        st.write("  Valid connection found.")
+                                        current_date = next_departure_time.strftime('%Y-%m-%d')
+                                        found_connection = True
                                         break
-
-                                if valid_next_train:
-                                    st.write("  Valid connection found.")
-                                    current_date = next_departure_time.strftime('%Y-%m-%d')
+                                    else:
+                                        st.write("  No valid connecting train found.")
+                                        found_connection = False
+                                else:
                                     found_connection = True
                                     break
-                                else:
-                                    st.write("  No valid connecting train found.")
-                                    found_connection = False
-                            else:
-                                found_connection = True
-                                break
 
-                    if not found_connection:
-                        st.write(f"No trains found from {from_station} to {to_station} on {current_date}.")
-                        break
+                        if not found_connection:
+                            st.write(f"No trains found from {from_station} to {to_station} on {current_date}.")
+                            break
 
-                # Send the compiled train and fare details to the model for formatting
-                formatted_train_info = model.generate_content(f"Please format the following train journey details and fares in a user-friendly way: {train_info_for_model}")
-                st.write(formatted_train_info.text)
+                    # Send the compiled train and fare details to the model for formatting
+                    formatted_train_info = model.generate_content(f"Please format the following train journey details and fares in a user-friendly way: {train_info_for_model}")
+                    st.write(formatted_train_info.text)
+                    
 
 
