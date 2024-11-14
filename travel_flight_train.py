@@ -13,6 +13,8 @@ import google.generativeai as genai
 import dateparser
 from fuzzywuzzy import process
 import subprocess
+import collections.abc
+
 # Load environment variables
 load_dotenv()
 api_key = st.secrets['GEMINI_API_KEY']
