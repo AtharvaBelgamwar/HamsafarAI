@@ -1,0 +1,8 @@
+pandas
+spacy
+streamlit
+google-generativeai
+python-dotenv
+fuzzywuzzy
+scikit-learn
+dateparser

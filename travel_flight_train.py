@@ -15,7 +15,7 @@ from fuzzywuzzy import process
 
 # Load environment variables
 load_dotenv()
-api_key = os.getenv('GEMINI_API_KEY')
+api_key = st.secrets['GEMINI_API_KEY']
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -31,7 +31,9 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 def get_fare_details(train_no, from_station_code, to_station_code, class_type, quota, journey_date):
     conn = http.client.HTTPSConnection("irctc1.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
+        'x-rapidapi-key': 
+st.secrets['x-rapidapi-key']
+,
         'x-rapidapi-host': "irctc1.p.rapidapi.com"
     }
     
@@ -167,7 +169,9 @@ def get_trains_between_stations(from_station, to_station, date_of_journey):
     to_station = to_station.strip() if to_station else ""
     conn = http.client.HTTPSConnection("irctc1.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
+        'x-rapidapi-key': 
+st.secrets['x-rapidapi-key']
+,
         'x-rapidapi-host': "irctc1.p.rapidapi.com"
     }
     url = f"/api/v3/trainBetweenStations?fromStationCode={from_station}&toStationCode={to_station}&dateOfJourney={date_of_journey}"
@@ -179,7 +183,9 @@ def get_trains_between_stations(from_station, to_station, date_of_journey):
 def get_city_identifiers(city):
     conn = http.client.HTTPSConnection("sky-scrapper.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
+        'x-rapidapi-key': 
+st.secrets['x-rapidapi-key']
+,
         'x-rapidapi-host': "sky-scrapper.p.rapidapi.com"
     }
     conn.request("GET", f"/api/v1/flights/searchAirport?query={city}&locale=en-US", headers=headers)
@@ -197,7 +203,9 @@ def get_city_identifiers(city):
 def get_flight_details(origin_skyId, destination_skyId, origin_entityId, destination_entityId, date):
     conn = http.client.HTTPSConnection("sky-scrapper.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
+        'x-rapidapi-key': 
+st.secrets['x-rapidapi-key']
+,
         'x-rapidapi-host': "sky-scrapper.p.rapidapi.com"
     }
     conn.request("GET", f"/api/v2/flights/searchFlightsComplete?originSkyId={origin_skyId}&destinationSkyId={destination_skyId}&originEntityId={origin_entityId}&destinationEntityId={destination_entityId}&date={date}&cabinClass=economy&adults=1&sortBy=best&currency=INR&market=en-US&countryCode=US", headers=headers)
