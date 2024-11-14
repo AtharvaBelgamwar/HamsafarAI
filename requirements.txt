@@ -6,5 +6,6 @@ fuzzywuzzy
 scikit-learn
 dateparser
 spacy
-cython==0.29.24
+cython==0.29.
+thinc
 
