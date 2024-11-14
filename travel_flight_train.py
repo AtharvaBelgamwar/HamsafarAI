@@ -31,7 +31,7 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 def get_fare_details(train_no, from_station_code, to_station_code, class_type, quota, journey_date):
     conn = http.client.HTTPSConnection("irctc1.p.rapidapi.com")
     headers = {
-        'x-rapidapi-key': 'b23f4ed7b9msh80d0c1957ac19f2p19c71djsn936ce06cd38a',
+        'x-rapidapi-key': os.getenv('x-rapidapi-key'),
         'x-rapidapi-host': "irctc1.p.rapidapi.com"
     }
     
