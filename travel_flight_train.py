@@ -287,7 +287,7 @@ def parse_travel_plan(response_text):
     print(flight_cities,train_cities)
     return flight_cities, train_cities
 # Streamlit Interface
-st.title("Travel Planner")
+st.title("HumsafarAI you deserve this vacation..")
 
 # Initialize session state variables if not already set
 if "origin" not in st.session_state:
