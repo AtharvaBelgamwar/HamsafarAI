@@ -20,11 +20,9 @@ load_dotenv()
 api_key = st.secrets['GEMINI_API_KEY']
 
 # Load spaCy model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+
+nlp = spacy.load("en_core_web_sm")
+
 
 # Load and filter cities data
 df1 = pd.read_csv(r'Indian_cities.csv')
@@ -364,8 +362,9 @@ if st.session_state.details_confirmed:
     # Train Segment
             if train_cities:
                 st.write("Fetching station codes for train cities...")
-                station_codes_response = model.generate_content(f"find station codes for {', '.join(train_cities)} cities, separated by commas with no spaces in between.")
+                station_codes_response = model.generate_content(f"find station codes for {', '.join(train_cities)} cities, separated by commas with no spaces in between.Give the most common station codes if there are multiple, make sure u give a staion code for each city")
                 station_codes = station_codes_response.text.strip().split(",")
+                print(station_codes)
 
                 if len(station_codes) != len(train_cities):
                     st.write("Failed to fetch all station codes. Please try again or adjust the station codes manually.")
